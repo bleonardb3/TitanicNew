@@ -5,9 +5,9 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, RadioField, FloatField, IntegerField
 from wtforms.validators import Required, Length, NumberRange
 
-#url = 'https://ibm-watson-ml.mybluemix.net'
-#username = '1e31f23c-ad34-4927-8283-a55f66caec00'
-#password = 'ec54ced2-3909-4378-a42f-ee7e5081dd3d'
+#url = 'https://us-south.ml.cloud.ibm.com'
+#username = '30157a36-5b6b-4fbc-b65f-634e5c97a628'
+#password = '5c2e95cf-fce9-4a82-bbba-b7024a716322'
 
 if 'VCAP_SERVICES' in os.environ:
     vcap = json.loads(os.getenv('VCAP_SERVICES'))
@@ -17,17 +17,17 @@ if 'VCAP_SERVICES' in os.environ:
         username = creds['username']
         password = creds['password']
         url = creds['url']
-scoring_endpoint = 'https://ibm-watson-ml.mybluemix.net/v3/wml_instances/374817e5-8365-42da-a434-cb20e3d1fba4/published_models/9b867182-4926-4144-812b-cc8cf6ea33bf/deployments/c45a87fb-50d1-4b17-ad04-703f551aa99d/online'
+scoring_endpoint = 'https://us-south.ml.cloud.ibm.com/v4/deployments/91019be5-095c-4bbf-bc1c-77bb9a1fc20e/predictions'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secretpassw0rd'
 bootstrap = Bootstrap(app)
 class TitanicForm(FlaskForm):
-  pclass = RadioField('Passenger Class:', coerce=int, choices=[('1','First'),('2','Second'),('3','Third')])
+  pclass = RadioField('Passenger Class:', coerce=str, choices=[('1','First'),('2','Second'),('3','Third')])
   sex = RadioField('Gender:', coerce=str, choices=[('male','Male'),('female','Female')])
-  age = IntegerField('Age:')
-  fare = FloatField('Fare:')
-  sibsp = IntegerField('Number of siblings/spouses:')
-  parch = IntegerField('Number of parents/children:')
+  age = StringField('Age:')
+  fare = StringField('Fare:')
+  sibsp = StringField('Number of siblings/spouses:')
+  parch = StringField('Number of parents/children:')
   embarked = RadioField('Embark Location:', coerce=str, choices=[('S','South Hampton'),('C','Cherbourg'),('Q','Queenstown')])
   submit = SubmitField('Submit')
 @app.route('/', methods=['GET', 'POST'])
@@ -56,16 +56,18 @@ def index():
     response = requests.get(path, headers=headers)
     mltoken = json.loads(response.text).get('token')
     scoring_header = {'Content-Type': 'application/json', 'Authorization': 'Bearer' + mltoken}
-    payload = {"fields": ["pclass","sex","sibsp","parch","fare","embarked","age"], "values": [[pclass,sex,sibsp,parch,fare,embarked,age]]}
+    payload = {"input_data": [{"fields": ["pclass","sex","age","sibsp","parch","fare","embarked"], "values": [[pclass,sex,age,sibsp,parch,fare,embarked]]}]}
+    print("payload:",payload)
     scoring = requests.post(scoring_endpoint, json=payload, headers=scoring_header)
 
     scoringDICT = json.loads(scoring.text) 
-    scoringList = scoringDICT['values'].pop()[11:13]
+    print("scoringDICT:",scoringDICT)
+    scoringList = scoringDICT['predictions'][0]['values']
     print (scoringList)
-    score = scoringList[1:].pop()
-    probability_died = scoringList[0:1].pop()[0:1].pop()
+    score = scoringList[0][0]
+    probability_died = scoringList[0][1][0]
     print (probability_died)
-    probability_survived = scoringList[0:1].pop()[1:].pop()
+    probability_survived = scoringList[0][1][1]
     if (score == 1.0) :
       score_str = "survived"
       probability = probability_survived                                        
