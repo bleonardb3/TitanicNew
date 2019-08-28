@@ -14,10 +14,12 @@ if 'VCAP_SERVICES' in os.environ:
     print('Found VCAP_SERVICES')
     if 'pm-20' in vcap:
         creds = vcap['pm-20'][0]['credentials']
-        username = creds['username']
-        password = creds['password']
+        username = 'apikey'
+        password = creds['apikey']
+        wml_apikey = creds['apikey']
+        ml_instance_id = creds['instance_id']
         url = creds['url']
-scoring_endpoint = 'https://us-south.ml.cloud.ibm.com/v4/deployments/91019be5-095c-4bbf-bc1c-77bb9a1fc20e/predictions'
+scoring_endpoint = 'https://us-south.ml.cloud.ibm.com/v4/deployments/887f5e4d-5768-4a78-bf99-5dd7b867f7c2/predictions'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secretpassw0rd'
 bootstrap = Bootstrap(app)
@@ -33,7 +35,7 @@ class TitanicForm(FlaskForm):
 @app.route('/', methods=['GET', 'POST'])
 def index():
   form = TitanicForm()
-  if form.is_submitted(): 
+  if form.is_submitted():
     sex = form.sex.data
     print (sex)
     form.sex.data = ''
@@ -43,24 +45,33 @@ def index():
     pclass = form.pclass.data
     form.pclass.data = ''
     fare = form.fare.data
-    form.fare.data = '' 
+    form.fare.data = ''
     sibsp = form.sibsp.data
     form.sibsp.data = ''
     parch = form.parch.data
-    form.parch.data = ''   
+    form.parch.data = ''
     embarked = form.embarked.data
-    form.embarked.data = ''    
-    
-    headers = urllib3.util.make_headers(basic_auth='{}:{}'.format(username, password))
-    path = '{}/v3/identity/token'.format(url)
-    response = requests.get(path, headers=headers)
-    mltoken = json.loads(response.text).get('token')
-    scoring_header = {'Content-Type': 'application/json', 'Authorization': 'Bearer' + mltoken}
+    form.embarked.data = ''
+
+    iam_url = "https://iam.bluemix.net/oidc/token"
+    print("iam_url:", iam_url)
+    print("wml_apikey:")
+    headers = { "Content-Type" : "application/x-www-form-urlencoded" }
+    data    = "apikey=" + wml_apikey + "&grant_type=urn:ibm:params:oauth:grant-type:apikey"
+    print("data:",data)
+    IBM_cloud_IAM_uid = "bx"
+    IBM_cloud_IAM_pwd = "bx"
+    print("wml_apikey:", wml_apikey)
+    response  = requests.post( iam_url, headers=headers, data=data, auth=( IBM_cloud_IAM_uid, IBM_cloud_IAM_pwd ) )
+    iam_token = response.json()["access_token"]
+
+    auth = 'Bearer ' + iam_token
+    scoring_header = {'Content-Type': 'application/json', 'Authorization': auth, 'ML-Instance-ID': ml_instance_id}
     payload = {"input_data": [{"fields": ["pclass","sex","age","sibsp","parch","fare","embarked"], "values": [[pclass,sex,age,sibsp,parch,fare,embarked]]}]}
     print("payload:",payload)
     scoring = requests.post(scoring_endpoint, json=payload, headers=scoring_header)
 
-    scoringDICT = json.loads(scoring.text) 
+    scoringDICT = json.loads(scoring.text)
     print("scoringDICT:",scoringDICT)
     scoringList = scoringDICT['predictions'][0]['values']
     print (scoringList)
@@ -70,11 +81,11 @@ def index():
     probability_survived = scoringList[0][1][1]
     if (score == 1.0) :
       score_str = "survived"
-      probability = probability_survived                                        
+      probability = probability_survived
     else :
       score_str = "did not survive"
       probability = probability_died
-      
+
     #probability = scoringList[6:7].pop()[0:1].pop()
 
     return render_template('score.html', form=form, scoring=score_str,probability=probability)
